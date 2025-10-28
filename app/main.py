@@ -2,8 +2,9 @@ import os
 import sys
 import re
 import time
+import threading
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 try:
     # Pillow is required for screenshots and image loading
@@ -25,6 +26,25 @@ from tkinter import ttk, filedialog, messagebox
 
 APP_TITLE = "Wallet Screenshot Helper"
 CAPTURE_DIR = os.path.join(os.path.expanduser("~"), "Pictures", "wallet_captures")
+
+# ---- Optional crypto libs (for mnemonic + balances) ----
+try:
+    from bip_utils import (
+        Bip39MnemonicValidator,
+        Bip39SeedGenerator,
+        Bip44,
+        Bip44Coins,
+        Bip44Changes,
+    )
+    BIPUTILS_AVAILABLE = True
+except Exception:
+    BIPUTILS_AVAILABLE = False
+
+try:
+    import requests  # type: ignore
+    REQUESTS_AVAILABLE = True
+except Exception:
+    REQUESTS_AVAILABLE = False
 
 
 def ensure_dir(path: str) -> None:
@@ -162,6 +182,15 @@ class WalletScreenshotApp(ttk.Frame):
         self.entry_keyword.bind("<Return>", lambda _e: self._update_matches())
         self.entry_keyword.bind("<KeyRelease>", lambda _e: self._update_matches())
 
+        # Mnemonic detection + balances
+        self.mnemonic_var = tk.StringVar(value="")
+        self.mnemonic_label = ttk.Label(self, textvariable=self.mnemonic_var)
+        self.mnemonic_label.grid(row=6, column=0, columnspan=7, sticky="w", pady=(8, 0))
+
+        self.balance_var = tk.StringVar(value="")
+        self.balance_label = ttk.Label(self, textvariable=self.balance_var)
+        self.balance_label.grid(row=7, column=0, columnspan=7, sticky="w", pady=(4, 0))
+
         # Footer
         self.footer = ttk.Label(
             self,
@@ -170,7 +199,7 @@ class WalletScreenshotApp(ttk.Frame):
                 + ("(Tesseract not detected)" if not TESSERACT_AVAILABLE else "")
             ),
         )
-        self.footer.grid(row=6, column=0, columnspan=7, sticky="w", pady=(12, 0))
+        self.footer.grid(row=8, column=0, columnspan=7, sticky="w", pady=(12, 0))
 
         self.pack(fill="both", expand=True)
 
@@ -273,6 +302,8 @@ class WalletScreenshotApp(ttk.Frame):
             self.result_var.set("No profit text detected. Try selecting tighter around the number.")
         # Update keyword matches after OCR completes
         self._update_matches()
+        # Attempt mnemonic detection and, if possible, check balances
+        self._detect_mnemonic_and_maybe_fetch()
 
     def _copy_profit(self) -> None:
         if not self.state.last_image:
@@ -364,6 +395,127 @@ class WalletScreenshotApp(ttk.Frame):
         self._set_preview(processed)
         self._try_ocr(processed)
         self._schedule_next_live()
+
+    # --- Mnemonic + balance detection ---
+    def _detect_mnemonic_and_maybe_fetch(self) -> None:
+        if not BIPUTILS_AVAILABLE:
+            self.mnemonic_var.set("Mnemonic detection unavailable (install bip-utils).")
+            return
+        text = (self.state.last_text or "").lower()
+        tokens = re.findall(r"[a-z]+", text)
+        detected: Optional[str] = None
+        for i in range(0, max(0, len(tokens) - 11)):
+            candidate = " ".join(tokens[i : i + 12])
+            try:
+                if Bip39MnemonicValidator(candidate).Validate():
+                    detected = candidate
+                    break
+            except Exception:
+                continue
+        if not detected:
+            self.mnemonic_var.set("")
+            self.balance_var.set("")
+            return
+        masked = self._mask_mnemonic(detected)
+        self.mnemonic_var.set(f"12-word phrase detected: {masked}")
+        # Fetch balances in background
+        if REQUESTS_AVAILABLE:
+            threading.Thread(target=self._fetch_balances_thread, args=(detected,), daemon=True).start()
+        else:
+            self.balance_var.set("Install requests to check balances.")
+
+    def _mask_mnemonic(self, mnemonic: str) -> str:
+        parts = mnemonic.split()
+        if len(parts) != 12:
+            return mnemonic
+        # mask middle words
+        masked = [parts[0], parts[1]] + ["•••"] * 8 + [parts[-2], parts[-1]]
+        return " ".join(masked)
+
+    def _fetch_balances_thread(self, mnemonic: str) -> None:
+        addresses = self._derive_addresses(mnemonic)
+        balances: Dict[str, str] = {}
+        if "BTC" in addresses:
+            try:
+                balances["BTC"] = self._get_btc_balance(addresses["BTC"]) or "?"
+            except Exception:
+                balances["BTC"] = "error"
+        if "ETH" in addresses:
+            try:
+                balances["ETH"] = self._get_eth_balance(addresses["ETH"]) or "?"
+            except Exception:
+                balances["ETH"] = "error"
+
+        def update_label() -> None:
+            lines = []
+            if "BTC" in addresses:
+                lines.append(f"BTC {addresses['BTC']}: {balances.get('BTC', '?')}")
+            if "ETH" in addresses:
+                lines.append(f"ETH {addresses['ETH']}: {balances.get('ETH', '?')}")
+            self.balance_var.set("\n".join(lines))
+
+        self.master.after(0, update_label)
+
+    def _derive_addresses(self, mnemonic: str) -> Dict[str, str]:
+        res: Dict[str, str] = {}
+        try:
+            seed = Bip39SeedGenerator(mnemonic).Generate()
+            # BTC m/44'/0'/0'/0/0
+            btc_ctx = (
+                Bip44.FromSeed(seed, Bip44Coins.BITCOIN)
+                .Purpose()
+                .Coin()
+                .Account(0)
+                .Change(Bip44Changes.CHAIN_EXT)
+                .AddressIndex(0)
+            )
+            res["BTC"] = btc_ctx.PublicKey().ToAddress()
+        except Exception:
+            pass
+        try:
+            eth_ctx = (
+                Bip44.FromSeed(seed, Bip44Coins.ETHEREUM)
+                .Purpose()
+                .Coin()
+                .Account(0)
+                .Change(Bip44Changes.CHAIN_EXT)
+                .AddressIndex(0)
+            )
+            res["ETH"] = eth_ctx.PublicKey().ToAddress()
+        except Exception:
+            pass
+        return res
+
+    def _get_eth_balance(self, address: str) -> Optional[str]:
+        # Cloudflare public RPC
+        url = "https://cloudflare-eth.com"
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_getBalance",
+            "params": [address, "latest"],
+        }
+        r = requests.post(url, json=payload, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        if "result" not in data:
+            return None
+        wei = int(data["result"], 16)
+        eth = wei / 10**18
+        return f"{eth:.6f} ETH"
+
+    def _get_btc_balance(self, address: str) -> Optional[str]:
+        # Blockstream API
+        r = requests.get(f"https://blockstream.info/api/address/{address}", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        chain = data.get("chain_stats", {})
+        mempool = data.get("mempool_stats", {})
+        funded = int(chain.get("funded_txo_sum", 0)) + int(mempool.get("funded_txo_sum", 0))
+        spent = int(chain.get("spent_txo_sum", 0)) + int(mempool.get("spent_txo_sum", 0))
+        sats = funded - spent
+        btc = sats / 10**8
+        return f"{btc:.8f} BTC"
 
 
 class SelectionOverlay:
