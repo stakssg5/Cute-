@@ -1,3 +1,4 @@
 tkinterweb==3.24.5; platform_system != 'Windows' and python_version >= '3.8'
 pyinstaller==6.10.0
 pyperclip==1.9.0
+Pillow==10.4.0

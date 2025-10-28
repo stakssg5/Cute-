@@ -25,7 +25,7 @@ class CryptoPRApp(Tk):
 
         self.wallets_checked = IntVar(value=3830672)
         self.searching = BooleanVar(value=False)
-        self.speed = IntVar(value=5)  # 1..10
+        self.speed = IntVar(value=10)  # 1..10, default to fastest
 
         self._build_header()
         self._build_counters()
