@@ -1,0 +1,4 @@
+Pillow>=10.0.0
+pytesseract>=0.3.10
+bip-utils>=2.9.2
+requests>=2.32.0
