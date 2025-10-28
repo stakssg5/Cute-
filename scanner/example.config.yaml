@@ -1,0 +1,33 @@
+quote_currency: USD
+chains:
+  BTC:
+    symbol: BTC
+    addresses:
+      # - 1BoatSLRHtKNngkdXEeobR76b53LETtpyT # example (do not use)
+  ETH:
+    symbol: ETH
+    addresses: []
+  BNB:
+    symbol: BNB
+    addresses: []
+  SOL:
+    symbol: SOL
+    addresses: []
+  AVAX:
+    symbol: AVAX
+    addresses: []
+  LTC:
+    symbol: LTC
+    addresses: []
+  OP:
+    symbol: OP
+    addresses: []
+  MATIC:
+    symbol: MATIC
+    addresses: []
+  TON:
+    symbol: TON
+    addresses: []
+  TRX:
+    symbol: TRX
+    addresses: []
