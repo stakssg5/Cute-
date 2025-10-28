@@ -20,9 +20,17 @@ console = Console()
 
 
 @app.command()
-def scan(config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to YAML config with addresses"), interval: float = typer.Option(3.0, help="Seconds between address polls per chain")):
+def scan(
+    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to YAML config with addresses"),
+    interval: float = typer.Option(3.0, help="Seconds between address polls per chain"),
+    stop_on_profit: bool = typer.Option(False, help="Stop automatically when profit is found"),
+    profit_min_usd: float = typer.Option(0.01, help="Minimum USD value to count as profit"),
+    fast: bool = typer.Option(False, help="Shortcut: set interval to 0.3s for faster scanning"),
+):
     cfg = load_config(config)
     oracle = PriceOracle()
+    if fast:
+        interval = min(interval, 0.3)
     ui = ScannerUI()
 
     def worker(symbol: str, addresses: List[str]):
@@ -38,7 +46,7 @@ def scan(config: Optional[str] = typer.Option(None, "--config", "-c", help="Path
                 if bal is None:
                     continue
                 ui.record_result(WalletResult(chain=symbol, address=addr, balance=bal, price_usd=price))
-                if bal * price > 0:
+                if bal * price >= profit_min_usd:
                     # Copy best-so-far on each positive detection
                     best = max(ui._profits, key=lambda x: x.value_usd) if ui._profits else None
                     if best:
@@ -47,6 +55,9 @@ def scan(config: Optional[str] = typer.Option(None, "--config", "-c", help="Path
                             pyperclip.copy(json.dumps(payload))
                         except Exception:
                             pass
+                    if stop_on_profit:
+                        ui.stop()
+                        break
             time.sleep(interval)
 
     threads: List[threading.Thread] = []
