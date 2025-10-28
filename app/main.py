@@ -79,8 +79,8 @@ class CryptoPRApp(Tk):
         Label(body, textvariable=self.btc_usd, fg="#3bc46b", bg="#1a2238", font=("Inter", 16)).pack(anchor="w")
         Label(body, text=self.btc_addr, fg="#8b97b1", bg="#1a2238", font=("Inter", 12)).pack(anchor="w", pady=(2,0))
 
-        copy_btn = Button(card, text="Copy", command=self._copy_btc, bg="#2a3352", fg="#dbe3ff", activebackground="#354169", relief="flat")
-        copy_btn.pack(side="right", padx=10)
+        self.copy_btn = Button(card, text="Copy", command=self._copy_btc, bg="#2a3352", fg="#dbe3ff", activebackground="#354169", relief="flat")
+        self.copy_btn.pack(side="right", padx=10)
 
         self.profits_container = container
 
@@ -187,8 +187,13 @@ class CryptoPRApp(Tk):
                 copied = True
             except Exception:
                 copied = False
-        # Provide small visual hint by briefly changing the button text
-        # This avoids adding additional popups
+        # Provide small visual hint by briefly changing the button state
+        try:
+            self.copy_btn.configure(text="Copied", state="disabled")
+            # revert after 1200ms
+            self.after(1200, lambda: self.copy_btn.configure(text="Copy", state="normal"))
+        except Exception:
+            pass
 
     def _tick(self) -> None:
         # Update counters if searching
