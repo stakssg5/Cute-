@@ -46,6 +46,17 @@ try:
 except Exception:
     REQUESTS_AVAILABLE = False
 
+# Attempt to auto-configure Tesseract path on Windows if module is present
+if TESSERACT_AVAILABLE:
+    try:
+        from tesseract_helper import find_tesseract_path  # type: ignore
+
+        _tpath = find_tesseract_path()
+        if _tpath:
+            pytesseract.pytesseract.tesseract_cmd = _tpath  # type: ignore
+    except Exception:
+        pass
+
 
 def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
