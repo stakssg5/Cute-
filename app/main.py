@@ -81,6 +81,9 @@ class WalletScreenshotApp(ttk.Frame):
         self.state = ScreenshotState()
         self.selection_overlay: Optional[SelectionOverlay] = None
         self.keyword_var = tk.StringVar(value="")
+        self.interval_var = tk.StringVar(value="1000")  # ms
+        self.is_live: bool = False
+        self.live_bbox: Optional[Tuple[int, int, int, int]] = None
 
         master.title(APP_TITLE)
         master.minsize(520, 420)
@@ -106,46 +109,55 @@ class WalletScreenshotApp(ttk.Frame):
     def _build_ui(self) -> None:
         # Header
         header = ttk.Label(self, text="Screenshot + Profit Copy", style="Header.TLabel")
-        header.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
+        header.grid(row=0, column=0, columnspan=7, sticky="w", pady=(0, 8))
 
         # Buttons row
         self.btn_select = ttk.Button(self, text="Select area", command=self._start_selection)
         self.btn_open = ttk.Button(self, text="Open image…", command=self._open_image)
         self.btn_save = ttk.Button(self, text="Save screenshot", command=self._save_last)
         self.btn_copy = ttk.Button(self, text="Copy profit", command=self._copy_profit)
+        self.btn_live = ttk.Button(self, text="Start live", command=self._toggle_live)
 
         self.btn_select.grid(row=1, column=0, sticky="ew", padx=(0, 8))
         self.btn_open.grid(row=1, column=1, sticky="ew", padx=(0, 8))
         self.btn_save.grid(row=1, column=2, sticky="ew", padx=(0, 8))
         self.btn_copy.grid(row=1, column=3, sticky="ew")
+        
+        ttk.Label(self, text="Interval ms:").grid(row=1, column=4, sticky="e", padx=(16, 4))
+        self.entry_interval = ttk.Entry(self, width=8, textvariable=self.interval_var)
+        self.entry_interval.grid(row=1, column=5, sticky="w")
+        self.btn_live.grid(row=1, column=6, sticky="ew", padx=(8, 0))
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
         self.columnconfigure(3, weight=1)
+        self.columnconfigure(4, weight=0)
+        self.columnconfigure(5, weight=0)
+        self.columnconfigure(6, weight=0)
 
         # Preview canvas
         self.preview_label = ttk.Label(self, text="No screenshot yet")
-        self.preview_label.grid(row=2, column=0, columnspan=4, sticky="nsew", pady=(16, 8))
+        self.preview_label.grid(row=2, column=0, columnspan=7, sticky="nsew", pady=(16, 8))
         self.rowconfigure(2, weight=1)
 
         # OCR result
         self.result_var = tk.StringVar(value="")
         self.result_label = ttk.Label(self, textvariable=self.result_var, style="Result.TLabel")
-        self.result_label.grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        self.result_label.grid(row=3, column=0, columnspan=7, sticky="w", pady=(8, 0))
 
         # Keyword filter row
         ttk.Label(self, text="Find word:").grid(row=4, column=0, sticky="w", pady=(8, 4))
         self.entry_keyword = ttk.Entry(self, textvariable=self.keyword_var)
-        self.entry_keyword.grid(row=4, column=1, sticky="ew", pady=(8, 4))
+        self.entry_keyword.grid(row=4, column=1, columnspan=3, sticky="ew", pady=(8, 4))
         self.btn_find = ttk.Button(self, text="Find", command=self._update_matches)
-        self.btn_find.grid(row=4, column=2, sticky="ew", padx=(8, 8), pady=(8, 4))
+        self.btn_find.grid(row=4, column=4, sticky="ew", padx=(8, 8), pady=(8, 4))
         self.btn_copy_match = ttk.Button(self, text="Copy match", command=self._copy_selected_match)
-        self.btn_copy_match.grid(row=4, column=3, sticky="ew", pady=(8, 4))
+        self.btn_copy_match.grid(row=4, column=5, sticky="ew", pady=(8, 4))
 
         # Matches list
         self.matches_list = tk.Listbox(self, height=5)
-        self.matches_list.grid(row=5, column=0, columnspan=4, sticky="nsew")
+        self.matches_list.grid(row=5, column=0, columnspan=7, sticky="nsew")
         self.rowconfigure(5, weight=1)
         self.entry_keyword.bind("<Return>", lambda _e: self._update_matches())
         self.entry_keyword.bind("<KeyRelease>", lambda _e: self._update_matches())
@@ -158,7 +170,7 @@ class WalletScreenshotApp(ttk.Frame):
                 + ("(Tesseract not detected)" if not TESSERACT_AVAILABLE else "")
             ),
         )
-        self.footer.grid(row=6, column=0, columnspan=4, sticky="w", pady=(12, 0))
+        self.footer.grid(row=6, column=0, columnspan=7, sticky="w", pady=(12, 0))
 
         self.pack(fill="both", expand=True)
 
@@ -179,12 +191,13 @@ class WalletScreenshotApp(ttk.Frame):
     def _on_selection_cancel(self) -> None:
         self.master.deiconify()
 
-    def _on_area_captured(self, img: Image.Image) -> None:
+    def _on_area_captured(self, img: Image.Image, bbox: Tuple[int, int, int, int]) -> None:
         # Optional preprocess for better OCR contrast
         processed = ImageOps.grayscale(img)
         processed = processed.filter(ImageFilter.MedianFilter(size=3))
         self.state.last_image = processed
         self.state.last_path = None
+        self.live_bbox = bbox
         self._set_preview(processed)
         self._try_ocr(processed)
         self.master.deiconify()
@@ -312,6 +325,46 @@ class WalletScreenshotApp(ttk.Frame):
             return
         self.result_var.set(f"Copied match: {value[:48]}{'…' if len(value) > 48 else ''}")
 
+    # --- Live capture ---
+    def _toggle_live(self) -> None:
+        if self.is_live:
+            self.is_live = False
+            self.btn_live.configure(text="Start live")
+            return
+        if not self.live_bbox:
+            messagebox.showinfo("Live", "Select an area first.")
+            return
+        self.is_live = True
+        self.btn_live.configure(text="Stop live")
+        self._schedule_next_live()
+
+    def _schedule_next_live(self) -> None:
+        if not self.is_live:
+            return
+        try:
+            interval_ms = max(200, int(self.interval_var.get().strip() or "1000"))
+        except Exception:
+            interval_ms = 1000
+        self.after(interval_ms, self._live_tick)
+
+    def _live_tick(self) -> None:
+        if not self.is_live or not self.live_bbox:
+            return
+        try:
+            img = ImageGrab.grab(bbox=self.live_bbox)
+        except Exception as exc:
+            self.is_live = False
+            self.btn_live.configure(text="Start live")
+            messagebox.showerror("Live capture failed", str(exc))
+            return
+        processed = ImageOps.grayscale(img)
+        processed = processed.filter(ImageFilter.MedianFilter(size=3))
+        self.state.last_image = processed
+        self.state.last_path = None
+        self._set_preview(processed)
+        self._try_ocr(processed)
+        self._schedule_next_live()
+
 
 class SelectionOverlay:
     """Full-screen semi-transparent overlay for selecting a rectangular area."""
@@ -384,8 +437,9 @@ class SelectionOverlay:
         # The canvas is full-screen, so its origin is (0, 0) of the screen
         left, top = min(x1, x2), min(y1, y2)
         right, bottom = max(x1, x2), max(y1, y2)
+        bbox = (left, top, right, bottom)
         try:
-            img = ImageGrab.grab(bbox=(left, top, right, bottom))
+            img = ImageGrab.grab(bbox=bbox)
         except Exception as exc:
             messagebox.showerror("Screenshot failed", str(exc))
             self._cancel()
@@ -395,7 +449,7 @@ class SelectionOverlay:
                 self.overlay.destroy()
             except Exception:
                 pass
-        self.on_capture(img)
+        self.on_capture(img, bbox)
 
 
 def main() -> None:
