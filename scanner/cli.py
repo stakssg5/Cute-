@@ -77,3 +77,68 @@ def scan(config: Optional[str] = typer.Option(None, "--config", "-c", help="Path
 
 if __name__ == "__main__":
     app()  # pragma: no cover
+
+
+@app.command()
+def snapshot(
+    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to YAML config with addresses"),
+    duration: float = typer.Option(8.0, help="Seconds to scan before capturing"),
+    output: str = typer.Option("snapshot", help="Output file prefix (HTML and SVG)"),
+    interval: float = typer.Option(2.0, help="Seconds between polls per chain during snapshot run"),
+):
+    """Run a short scan and save a UI snapshot to HTML/SVG."""
+    cfg = load_config(config)
+    oracle = PriceOracle()
+    ui = ScannerUI()
+
+    def worker(symbol: str, addresses: List[str]):
+        adapter = get_adapter(symbol)
+        if not adapter:
+            return
+        price = oracle.get_price_usd(symbol) or 0.0
+        start_ts = time.time()
+        while time.time() - start_ts < duration and not ui.should_stop():
+            price = oracle.get_price_usd(symbol) or price
+            for addr in addresses:
+                if ui.should_stop() or time.time() - start_ts >= duration:
+                    break
+                bal = adapter.get_address_balance(addr)
+                if bal is None:
+                    continue
+                ui.record_result(WalletResult(chain=symbol, address=addr, balance=bal, price_usd=price))
+            time.sleep(interval)
+
+    threads: List[threading.Thread] = []
+    for symbol, chain_cfg in cfg.chains.items():
+        if not chain_cfg.addresses:
+            continue
+        t = threading.Thread(target=worker, args=(symbol, chain_cfg.addresses), daemon=True)
+        threads.append(t)
+    for t in threads:
+        t.start()
+
+    # Use a recording console to export the final render
+    rec_console = Console(record=True)
+    with Live(ui.render(), console=rec_console, refresh_per_second=6) as live:
+        start = time.time()
+        while time.time() - start < duration:
+            live.update(ui.render())
+            time.sleep(0.3)
+    ui.stop()
+    for t in threads:
+        t.join(timeout=1)
+
+    # Print once to the recording console and export artifacts
+    rec_console.print(ui.render())
+    html_path = f"{output}.html"
+    svg_path = f"{output}.svg"
+    try:
+        rec_console.save_html(html_path, inline_styles=True)
+        console.print(f"Saved [bold]{html_path}[/]")
+    except Exception:
+        console.print("Could not save HTML snapshot")
+    try:
+        rec_console.save_svg(svg_path)
+        console.print(f"Saved [bold]{svg_path}[/]")
+    except Exception:
+        console.print("Could not save SVG snapshot")
