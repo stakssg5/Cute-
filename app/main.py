@@ -80,6 +80,7 @@ class WalletScreenshotApp(ttk.Frame):
         self.master = master
         self.state = ScreenshotState()
         self.selection_overlay: Optional[SelectionOverlay] = None
+        self.keyword_var = tk.StringVar(value="")
 
         master.title(APP_TITLE)
         master.minsize(520, 420)
@@ -133,6 +134,22 @@ class WalletScreenshotApp(ttk.Frame):
         self.result_label = ttk.Label(self, textvariable=self.result_var, style="Result.TLabel")
         self.result_label.grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
+        # Keyword filter row
+        ttk.Label(self, text="Find word:").grid(row=4, column=0, sticky="w", pady=(8, 4))
+        self.entry_keyword = ttk.Entry(self, textvariable=self.keyword_var)
+        self.entry_keyword.grid(row=4, column=1, sticky="ew", pady=(8, 4))
+        self.btn_find = ttk.Button(self, text="Find", command=self._update_matches)
+        self.btn_find.grid(row=4, column=2, sticky="ew", padx=(8, 8), pady=(8, 4))
+        self.btn_copy_match = ttk.Button(self, text="Copy match", command=self._copy_selected_match)
+        self.btn_copy_match.grid(row=4, column=3, sticky="ew", pady=(8, 4))
+
+        # Matches list
+        self.matches_list = tk.Listbox(self, height=5)
+        self.matches_list.grid(row=5, column=0, columnspan=4, sticky="nsew")
+        self.rowconfigure(5, weight=1)
+        self.entry_keyword.bind("<Return>", lambda _e: self._update_matches())
+        self.entry_keyword.bind("<KeyRelease>", lambda _e: self._update_matches())
+
         # Footer
         self.footer = ttk.Label(
             self,
@@ -141,7 +158,7 @@ class WalletScreenshotApp(ttk.Frame):
                 + ("(Tesseract not detected)" if not TESSERACT_AVAILABLE else "")
             ),
         )
-        self.footer.grid(row=4, column=0, columnspan=4, sticky="w", pady=(12, 0))
+        self.footer.grid(row=6, column=0, columnspan=4, sticky="w", pady=(12, 0))
 
         self.pack(fill="both", expand=True)
 
@@ -241,6 +258,8 @@ class WalletScreenshotApp(ttk.Frame):
             self.result_var.set(f"Detected: {profit}")
         else:
             self.result_var.set("No profit text detected. Try selecting tighter around the number.")
+        # Update keyword matches after OCR completes
+        self._update_matches()
 
     def _copy_profit(self) -> None:
         if not self.state.last_image:
@@ -262,6 +281,36 @@ class WalletScreenshotApp(ttk.Frame):
 
     def on_quit(self) -> None:
         self.master.destroy()
+
+    # --- Keyword filtering helpers ---
+    def _update_matches(self) -> None:
+        """Update the matches list with lines from OCR text containing the keyword."""
+        keyword = (self.keyword_var.get() or "").strip()
+        self.matches_list.delete(0, tk.END)
+        if not self.state.last_text:
+            return
+        lines = [ln.strip() for ln in self.state.last_text.splitlines() if ln.strip()]
+        if not keyword:
+            return
+        keyword_lower = keyword.lower()
+        for ln in lines:
+            if keyword_lower in ln.lower():
+                self.matches_list.insert(tk.END, ln)
+
+    def _copy_selected_match(self) -> None:
+        selection = self.matches_list.curselection()
+        if not selection:
+            messagebox.showinfo("Copy match", "No match selected.")
+            return
+        value = self.matches_list.get(selection[0])
+        try:
+            self.master.clipboard_clear()
+            self.master.clipboard_append(value)
+            self.master.update()
+        except Exception as exc:
+            messagebox.showerror("Clipboard error", str(exc))
+            return
+        self.result_var.set(f"Copied match: {value[:48]}{'…' if len(value) > 48 else ''}")
 
 
 class SelectionOverlay:
