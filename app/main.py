@@ -18,7 +18,7 @@ def format_int_with_spaces(value: int) -> str:
 class CryptoPRApp(Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Crypto PR+ — Desktop")
+        self.title("Jonathanzoes — Desktop")
         self.configure(bg="#0e1525")
         self.geometry("460x820")
         self.minsize(420, 720)
@@ -41,7 +41,7 @@ class CryptoPRApp(Tk):
     def _build_header(self) -> None:
         bar = Frame(self, bg="#111a2e")
         bar.pack(fill="x", pady=(0, 8))
-        Label(bar, text="Crypto PR+", fg="#dbe3ff", bg="#111a2e", font=("Inter", 16, "bold")).pack(pady=8)
+        Label(bar, text="Jonathanzoes", fg="#dbe3ff", bg="#111a2e", font=("Inter", 16, "bold")).pack(pady=8)
         Label(bar, text="mini app", fg="#8aa0ff", bg="#111a2e", font=("Inter", 10)).pack(pady=(0, 10))
 
     def _build_counters(self) -> None:
