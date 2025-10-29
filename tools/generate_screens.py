@@ -36,7 +36,7 @@ def rounded_rectangle(draw: ImageDraw.ImageDraw, xy, radius: int, fill):
 def draw_header(draw: ImageDraw.ImageDraw):
     title_font = load_font(48, bold=True)
     sub_font = load_font(28)
-    draw.text((WIDTH // 2, 80), "Crypto PR+", font=title_font, fill=TEXT, anchor="ma")
+    draw.text((WIDTH // 2, 80), "Jonathanzoes", font=title_font, fill=TEXT, anchor="ma")
     draw.text((WIDTH // 2, 135), "mini app", font=sub_font, fill=(138, 160, 255), anchor="ma")
 
 

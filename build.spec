@@ -1,1 +1,37 @@
-# PyInstaller spec file for Crypto PR+ Desktop\n# Build with: pyinstaller build.spec\n\nblock_cipher = None\n\nfrom PyInstaller.utils.hooks import collect_submodules\n\nhiddenimports = [] + collect_submodules('tkinter')\n\na = Analysis(['app/main.py'],\n             pathex=['.'],\n             binaries=[],\n             datas=[],\n             hiddenimports=hiddenimports,\n             hookspath=[],\n             runtime_hooks=[],\n             excludes=[],\n             noarchive=False)\npyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)\nexe = EXE(pyz,\n          a.scripts,\n          [],\n          exclude_binaries=True,\n          name='CryptoPRPlus',\n          debug=False,\n          bootloader_ignore_signals=False,\n          strip=False,\n          upx=True,\n          console=False)\ncoll = COLLECT(exe,\n               a.binaries,\n               a.zipfiles,\n               a.datas,\n               strip=False,\n               upx=True,\n               upx_exclude=[],\n               name='CryptoPRPlus')\n
+# PyInstaller spec file for Crypto PR+ Desktop
+# Build with: pyinstaller build.spec
+
+block_cipher = None
+
+from PyInstaller.utils.hooks import collect_submodules
+
+hiddenimports = [] + collect_submodules('tkinter')
+
+a = Analysis(['app/main.py'],
+             pathex=['.'],
+             binaries=[],
+             datas=[],
+             hiddenimports=hiddenimports,
+             hookspath=[],
+             runtime_hooks=[],
+             excludes=[],
+             noarchive=False)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+exe = EXE(pyz,
+          a.scripts,
+          [],
+          exclude_binaries=True,
+          name='Jonathanzoes',
+          debug=False,
+          bootloader_ignore_signals=False,
+          strip=False,
+          upx=True,
+          console=False)
+coll = COLLECT(exe,
+               a.binaries,
+               a.zipfiles,
+               a.datas,
+               strip=False,
+               upx=True,
+               upx_exclude=[],
+               name='Jonathanzoes')
